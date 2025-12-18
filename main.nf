@@ -39,7 +39,8 @@ process MD5_BATCH {
     set -x
 
     for f in ${files.join(' ')}; do
-      md5sum "\$f" > "\$(basename "\$f").md5"
+      /home/oleksanf/github/ofrei/nextflow_test/task.sh "\$f" "\$(basename "\$f").md5"
+      # md5sum "\$f" > "\$(basename "\$f").md5"
     done
     """
 }
