@@ -12,7 +12,9 @@ workflow {
     .map { it.trim() }
     .filter { it }
     .map { file(it) }
-    // group files into batches of 5
+    .filter { f ->
+        !file("${params.outdir}/${f.name}.md5").exists()
+    }
     .buffer(size: params.batch_size, remainder: true)
     .set { batches }
 
@@ -34,6 +36,7 @@ process MD5_BATCH {
   script:
     """
     echo "Processing batch ${task.index} with ${files.size()} files (${files})"
+    set -x
 
     for f in ${files.join(' ')}; do
       md5sum "\$f" > "\$(basename "\$f").md5"
