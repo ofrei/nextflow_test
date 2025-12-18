@@ -6,5 +6,6 @@ for i in $(seq -w 1 100); do
 done
 
 # create the Nextflow input list
-ls file_*.txt > nf_input.txt
-
+for f in file_*.txt; do
+  echo -e "$(pwd)/$f\t$(pwd)/$f.md5"
+done > nf_input.txt
