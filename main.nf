@@ -2,6 +2,7 @@ nextflow.enable.dsl = 2
 
 params.input_list = params.input_list ?: 'nf_input.txt'
 params.outdir     = params.outdir     ?: 'results'
+params.batch_size = params.batch_size ?: 5
 
 workflow {
 
@@ -11,26 +12,32 @@ workflow {
     .map { it.trim() }
     .filter { it }
     .map { file(it) }
-    .set { inputs }
+    // group files into batches of 5
+    .buffer(size: params.batch_size, remainder: true)
+    .set { batches }
 
-  MD5SUM(inputs)
+  MD5_BATCH(batches)
 }
 
-process MD5SUM {
+process MD5_BATCH {
 
-  tag { input.baseName }
+  tag { "batch_${task.index}" }
 
   publishDir params.outdir, mode: 'copy'
 
   input:
-    path input
+    val files   // files = list of paths
 
   output:
-    path "${input.baseName}.md5"
+    path "*.md5"
 
   script:
     """
-    md5sum "${input}" > "${input.baseName}.md5"
+    echo "Processing batch ${task.index} with ${files.size()} files (${files})"
+
+    for f in ${files.join(' ')}; do
+      md5sum "\$f" > "\$(basename "\$f").md5"
+    done
     """
 }
 
