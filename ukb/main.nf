@@ -1,20 +1,28 @@
-nextflow.enable.dsl = 2
-
 /*
   Usage:
     module load Nextflow/24.04.2
-    ls /ess/p33/data/durable/s3-api/ukblake/bulk/20216 | head -n 100 > input_files_list.txt
+
+    # repeat the same for 20220 (T2 FLAIR)
+    dir="/ess/p33/data/durable/s3-api/ukblake/bulk/20216"
+    outdir="/ess/p33/cluster/ukbio_users/ofrei/recon/dcm2niix"
+
+    ls "$dir" | head -n 10000 | while IFS= read -r f; do
+      in="$dir/$f"
+      out="$outdir/"${f%.*}".nii"
+      echo -e "$in\t$out"
+    done > input_list_20216.txt
+
     nextflow run main.nf -profile tsd \
-      --input_list first_n100_T1dcmarchs_text.txt \
-      --batch_size 5 \
-      --outdir /ess/p33/cluster/ukbio_users/ofrei/recon/dcm2niix
+      --input_list /ess/p33/cluster/ukbio_users/ofrei/recon/input_list_20216.txt \
+      --task_script /ess/p33/cluster/ukbio_users/ofrei/recon/task.sh \
+
 */
 
-params.input_list = params.input_list
-params.outdir     = params.outdir
-params.batch_size = params.batch_size ?: 25
+nextflow.enable.dsl = 2
 
-params.dcm_root   = '/ess/p33/data/durable/s3-api/ukblake/bulk/20216'
+params.input_list = params.input_list
+params.task_script = params.task_script
+params.batch_size = params.batch_size ?: 10
 
 workflow {
 
@@ -23,8 +31,12 @@ workflow {
     .splitText()
     .map { it.trim() }
     .filter { it }
-    .filter { f ->
-        !file("${params.outdir}/${file(f).baseName}.nii").exists()
+    .map { line ->
+        def (inPath, outPath) = line.split('\t')
+        tuple( file(inPath), file(outPath) )
+    }
+    .filter { inFile, outFile ->
+        !outFile.exists()
     }
     .buffer(size: params.batch_size, remainder: true)
     .set { batches }
@@ -34,27 +46,28 @@ workflow {
 
 process PROCESS_BATCH {
 
-  tag { "chunk_${task.index}" }
-
-  publishDir params.outdir, mode: 'copy'
+  tag { "batch_${task.index}" }
 
   input:
-    val files   // files = list of paths
+    val batch   // list of (input, output) Path pairs
 
   output:
-    path "*.nii"
-    path "*.json"    
+    path ".done"
 
   script:
-    """
-    set -ux
+"""
+set -eux
 
-    echo "Processing batch ${task.index} with ${files.size()} files (${files})"
+# Write pairs to a TSV (robust, space-safe)
+cat << 'EOF' > pairs.tsv
+${batch.collect { "${it[0]}\t${it[1]}" }.join('\n')}
+EOF
 
-    mkdir -p "\${SCRATCH}/dcm" "\${SCRATCH}/nii"
+while IFS=\$'\\t' read -r in out; do
+  echo "Processing \$in -> \$out"
+  ${params.task_script} "\$in" "\$out"
+done < pairs.tsv
 
-    for ENTRY in ${files.join(' ')}; do
-      /ess/p33/cluster/ukbio_users/ofrei/recon/task.sh "${params.dcm_root}/\$ENTRY"
-    done
-    """
+touch .done
+"""
 }
