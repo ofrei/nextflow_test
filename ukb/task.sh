@@ -26,5 +26,5 @@ if [[ -z "${nii}" ]]; then
     exit 1
 fi
 
-mv $nii "$OUT_NII"
 mv ${nii%.*}.json ${OUT_NII%.*}.json
+mv $nii "$OUT_NII"
